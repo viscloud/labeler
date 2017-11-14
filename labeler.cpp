@@ -67,6 +67,9 @@ int64_t get_next_neighbor(std::set<int64_t>& set, int64_t frame_id) {
   return best_candidate;
 }
 
+#define NONE 0
+#define PARTIAL 1
+#define FULL 2
 int main(int argc, char* argv[]) {
   std::signal(SIGINT, handler);
   std::cout << "Commands" << std::endl;
@@ -87,7 +90,8 @@ int main(int argc, char* argv[]) {
   std::cout << "D - Go to closest full Finish point" << std::endl;
   std::cout << "A - Go to closest partial Start point" << std::endl;
   std::cout << "F - Go to closest partial Finish point" << std::endl;
-  int64_t skip_interval = 480;
+  uint8_t marking = NONE;
+  int64_t skip_interval = 60;
   int64_t frame_id = argc > 1 ? atoi(argv[1]) : 0;
   int64_t target_frame_id = frame_id;
   int64_t saved_tag = frame_id;
@@ -147,6 +151,15 @@ int main(int argc, char* argv[]) {
     cv::putText(frame,frame_number_string, frame_number_point, CV_FONT_HERSHEY_SIMPLEX, font_size, font_color, 2, CV_AA);
     cv::putText(frame,is_start_end_string, start_end_point, CV_FONT_HERSHEY_SIMPLEX, font_size, font_color, 2, CV_AA);
     cv::putText(frame,skip_interval_string, skip_interval_point, CV_FONT_HERSHEY_SIMPLEX, font_size, font_color, 2, CV_AA);
+    if(marking != NONE) {
+      extra_text = "";
+    }
+    if(marking & PARTIAL) {
+      extra_text += " (Partial) ";
+    }
+    if(marking & FULL) {
+      extra_text += " (Full) ";
+    }
     cv::putText(frame,extra_text, extra_point, CV_FONT_HERSHEY_SIMPLEX, font_size, font_color, 2, CV_AA);
     cv::imshow("video", frame);
     auto command = cv::waitKey(1);
@@ -175,6 +188,7 @@ int main(int argc, char* argv[]) {
     } else if(command == 'q') {
       break;
     } else if(command == 's') {
+      marking |= FULL;
       std::cout << start_frames_full.size() << std::endl;
       if(start_frames_full.find(frame_id) == start_frames_full.end())
         start_frames_full.insert(frame_id);
@@ -183,6 +197,7 @@ int main(int argc, char* argv[]) {
       if(frame_id != 0)
         vc.set(cv::CAP_PROP_POS_FRAMES, --frame_id);
     } else if(command == 'd') {
+      marking &= !FULL;
       if(end_frames_full.find(frame_id) == end_frames_full.end())
         end_frames_full.insert(frame_id);
       else
@@ -190,6 +205,7 @@ int main(int argc, char* argv[]) {
       if(frame_id != 0)
         vc.set(cv::CAP_PROP_POS_FRAMES, --frame_id);
     } else if(command == 'a') {
+      marking |= PARTIAL;
       std::cout << start_frames_partial.size() << std::endl;
       if(start_frames_partial.find(frame_id) == start_frames_partial.end())
         start_frames_partial.insert(frame_id);
@@ -198,6 +214,7 @@ int main(int argc, char* argv[]) {
       if(frame_id != 0)
         vc.set(cv::CAP_PROP_POS_FRAMES, --frame_id);
     } else if(command == 'f') {
+      marking &= !PARTIAL;
       if(end_frames_partial.find(frame_id) == end_frames_partial.end())
         end_frames_partial.insert(frame_id);
       else
