@@ -14,7 +14,7 @@
 #include <cstdint>
 #include <csignal>
 
-std::ostream& os = std::cout;
+std::ofstream os("labels.dat");
 
 std::set<int64_t> start_frames_full;
 std::set<int64_t> end_frames_full;
@@ -23,16 +23,16 @@ std::set<int64_t> end_frames_partial;
 
 void handler(int signal) {
   for(auto start : start_frames_full) {
-    os << "Full Start:" << start << std::endl;
+    std::cout << "Full Start:" << start << std::endl;
   }
   for(auto end: end_frames_full) {
-    os << "Full Finish:" << end << std::endl;
+    std::cout << "Full Finish:" << end << std::endl;
   }
   for(auto start : start_frames_partial) {
-    os << "Partial Start:" << start << std::endl;
+    std::cout << "Partial Start:" << start << std::endl;
   }
   for(auto end: end_frames_partial) {
-    os << "Partial Finish:" << end << std::endl;
+    std::cout << "Partial Finish:" << end << std::endl;
   }
 }
 
@@ -240,14 +240,18 @@ int main(int argc, char* argv[]) {
   }
   for(auto start : start_frames_full) {
     os << "Full Start:" << start << std::endl;
+    std::cout << "Full Start:" << start << std::endl;
   }
   for(auto end: end_frames_full) {
     os << "Full Finish:" << end << std::endl;
+    std::cout << "Full Finish:" << end << std::endl;
   }
   for(auto start : start_frames_partial) {
     os << "Partial Start:" << start << std::endl;
+    std::cout << "Partial Start:" << start << std::endl;
   }
   for(auto end: end_frames_partial) {
     os << "Partial Finish:" << end << std::endl;
+    std::cout << "Partial Finish:" << end << std::endl;
   }
 }
