@@ -71,6 +71,9 @@ int64_t get_next_neighbor(std::set<int64_t>& set, int64_t frame_id) {
 #define PARTIAL 1
 #define FULL 2
 int main(int argc, char* argv[]) {
+  if(argc < 2) {
+    std::cout << "Usage: label input_video <start_frame (optional)>" << std::endl;
+  }
   std::signal(SIGINT, handler);
   std::cout << "Commands" << std::endl;
   std::cout << "Spacebar - play really fast" << std::endl;
@@ -92,7 +95,7 @@ int main(int argc, char* argv[]) {
   std::cout << "F - Go to closest partial Finish point" << std::endl;
   uint8_t marking = NONE;
   int64_t skip_interval = 60;
-  int64_t frame_id = argc > 1 ? atoi(argv[1]) : 0;
+  int64_t frame_id = argc > 2 ? atoi(argv[2]) : 0;
   int64_t target_frame_id = frame_id;
   int64_t saved_tag = frame_id;
   cv::Point frame_number_point(20, 40);
@@ -107,7 +110,7 @@ int main(int argc, char* argv[]) {
   double font_size = 1;
   cv::Mat frame;
 
-  cv::VideoCapture vc("/home/tskim/jackson-full.mp4");
+  cv::VideoCapture vc(argv[1]);
   vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
 
   cv::namedWindow("video", cv::WINDOW_AUTOSIZE);
