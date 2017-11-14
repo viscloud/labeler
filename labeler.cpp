@@ -151,9 +151,7 @@ int main(int argc, char* argv[]) {
     cv::putText(frame,frame_number_string, frame_number_point, CV_FONT_HERSHEY_SIMPLEX, font_size, font_color, 2, CV_AA);
     cv::putText(frame,is_start_end_string, start_end_point, CV_FONT_HERSHEY_SIMPLEX, font_size, font_color, 2, CV_AA);
     cv::putText(frame,skip_interval_string, skip_interval_point, CV_FONT_HERSHEY_SIMPLEX, font_size, font_color, 2, CV_AA);
-    if(marking != NONE) {
-      extra_text = "";
-    }
+    extra_text = "";
     if(marking & PARTIAL) {
       extra_text += " (Partial) ";
     }
@@ -178,13 +176,9 @@ int main(int argc, char* argv[]) {
     } else if(command == '[') {
       skip_interval /= 2;
       skip_interval_string = "Fast-forward interval: " + std::to_string(skip_interval);
-      if(frame_id != 0)
-        vc.set(cv::CAP_PROP_POS_FRAMES, --frame_id);
     } else if(command == ']') {
       skip_interval *= 2;
       skip_interval_string = "Fast-forward interval: " + std::to_string(skip_interval);
-      if(frame_id != 0)
-        vc.set(cv::CAP_PROP_POS_FRAMES, --frame_id);
     } else if(command == 'q') {
       break;
     } else if(command == 's') {
@@ -194,16 +188,12 @@ int main(int argc, char* argv[]) {
         start_frames_full.insert(frame_id);
       else
         start_frames_full.erase(frame_id);
-      if(frame_id != 0)
-        vc.set(cv::CAP_PROP_POS_FRAMES, --frame_id);
     } else if(command == 'd') {
-      marking &= !FULL;
+      marking &= ~FULL;
       if(end_frames_full.find(frame_id) == end_frames_full.end())
         end_frames_full.insert(frame_id);
       else
         end_frames_full.erase(frame_id);
-      if(frame_id != 0)
-        vc.set(cv::CAP_PROP_POS_FRAMES, --frame_id);
     } else if(command == 'a') {
       marking |= PARTIAL;
       std::cout << start_frames_partial.size() << std::endl;
@@ -211,16 +201,12 @@ int main(int argc, char* argv[]) {
         start_frames_partial.insert(frame_id);
       else
         start_frames_partial.erase(frame_id);
-      if(frame_id != 0)
-        vc.set(cv::CAP_PROP_POS_FRAMES, --frame_id);
     } else if(command == 'f') {
-      marking &= !PARTIAL;
+      marking &= ~PARTIAL;
       if(end_frames_partial.find(frame_id) == end_frames_partial.end())
         end_frames_partial.insert(frame_id);
       else
         end_frames_partial.erase(frame_id);
-      if(frame_id != 0)
-        vc.set(cv::CAP_PROP_POS_FRAMES, --frame_id);
     } else if(command == 'S') {
         target_frame_id = get_prev_neighbor(start_frames_full, frame_id);
         saved_tag = frame_id;
@@ -240,7 +226,6 @@ int main(int argc, char* argv[]) {
     } else if(command == 'R') {
         extra_text = "";
         target_frame_id = saved_tag;
-        vc.set(cv::CAP_PROP_POS_FRAMES, --frame_id);
     } else if(command == ' ') {
         if(target_frame_id == INT64_MAX)
           target_frame_id = frame_id;
