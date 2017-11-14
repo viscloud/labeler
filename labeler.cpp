@@ -116,13 +116,13 @@ int main(int argc, char* argv[]) {
   cv::namedWindow("video", cv::WINDOW_AUTOSIZE);
   while(true) {
     if(frame_id < target_frame_id) {
-      vc >> frame;
-      frame_id += 1;
-      /*frame_id += (skip_interval / 30);
+      //vc >> frame;
+      //frame_id += 1;
+      frame_id += (skip_interval / 30);
       if(frame_id > target_frame_id)
         frame_id = target_frame_id;
       vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
-      vc >> frame;*/
+      vc >> frame;
     } else if(frame_id > target_frame_id) {
       frame_id -= (skip_interval / 30);
       if(frame_id < target_frame_id)
