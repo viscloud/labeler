@@ -21,21 +21,27 @@ std::set<int64_t> end_frames_full;
 std::set<int64_t> start_frames_partial;
 std::set<int64_t> end_frames_partial;
 
-void handler(int signal) {
-  for(auto start : start_frames_full) {
-    std::cout << "Full Start:" << start << std::endl;
-  }
-  for(auto end: end_frames_full) {
-    std::cout << "Full Finish:" << end << std::endl;
-  }
-  for(auto start : start_frames_partial) {
-    std::cout << "Partial Start:" << start << std::endl;
-  }
-  for(auto end: end_frames_partial) {
-    std::cout << "Partial Finish:" << end << std::endl;
-  }
+// Variables related to the fast-forward speed slider
+constexpr int ff_slider_max = 2000;
+int skip_interval = 60;
+void on_ff_slider_trackbar(int, void*) {
 }
 
+void print_events(std::iostream &stream) {
+  for(auto start : start_frames_full)
+    stream << "Full Start:" << start << std::endl;
+  for(auto end: end_frames_full)
+    stream << "Full Finish:" << end << std::endl;
+  for(auto start : start_frames_partial)
+    stream << "Partial Start:" << start << std::endl;
+  for(auto end: end_frames_partial)
+    stream << "Partial Finish:" << end << std::endl;
+}
+
+// Gracefully handle termination
+void handler(int signal) {
+  print_events(std::cout);
+}
 
 int64_t get_prev_neighbor(std::set<int64_t>& set, int64_t frame_id) {
   int64_t best_candidate = frame_id;
@@ -67,14 +73,7 @@ int64_t get_next_neighbor(std::set<int64_t>& set, int64_t frame_id) {
   return best_candidate;
 }
 
-#define NONE 0
-#define PARTIAL 1
-#define FULL 2
-int main(int argc, char* argv[]) {
-  if(argc < 2) {
-    std::cout << "Usage: label input_video <start_frame (optional)>" << std::endl;
-  }
-  std::signal(SIGINT, handler);
+void print_controls() {
   std::cout << "Commands" << std::endl;
   std::cout << "Spacebar - play really fast" << std::endl;
   std::cout << "p - pause immediately" << std::endl;
@@ -93,8 +92,18 @@ int main(int argc, char* argv[]) {
   std::cout << "D - Go to closest full Finish point" << std::endl;
   std::cout << "A - Go to closest partial Start point" << std::endl;
   std::cout << "F - Go to closest partial Finish point" << std::endl;
+}
+
+#define NONE 0
+#define PARTIAL 1
+#define FULL 2
+int main(int argc, char* argv[]) {
+  if(argc < 2) {
+    std::cout << "Usage: label input_video <start_frame (optional)>" << std::endl;
+  }
+  print_controls();
+  std::signal(SIGINT, handler);
   uint8_t marking = NONE;
-  int64_t skip_interval = 60;
   int64_t frame_id = argc > 2 ? atoi(argv[2]) : 0;
   int64_t target_frame_id = frame_id;
   int64_t saved_tag = frame_id;
@@ -114,15 +123,16 @@ int main(int argc, char* argv[]) {
   vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
 
   cv::namedWindow("video", cv::WINDOW_AUTOSIZE);
+  cv::createTrackbar("Fast forward speed (fps)", "video", &skip_interval, ff_slider_max, on_ff_slider_trackbar);
   while(true) {
     if(frame_id < target_frame_id) {
-      //vc >> frame;
-      //frame_id += 1;
-      frame_id += (skip_interval / 30);
+      vc >> frame;
+      frame_id += 1;
+      //frame_id += (skip_interval / 30);
       if(frame_id > target_frame_id)
         frame_id = target_frame_id;
-      vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
-      vc >> frame;
+      //vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
+      //vc >> frame;
     } else if(frame_id > target_frame_id) {
       frame_id -= (skip_interval / 30);
       if(frame_id < target_frame_id)
@@ -238,20 +248,5 @@ int main(int argc, char* argv[]) {
       // do nothing
     }
   }
-  for(auto start : start_frames_full) {
-    os << "Full Start:" << start << std::endl;
-    std::cout << "Full Start:" << start << std::endl;
-  }
-  for(auto end: end_frames_full) {
-    os << "Full Finish:" << end << std::endl;
-    std::cout << "Full Finish:" << end << std::endl;
-  }
-  for(auto start : start_frames_partial) {
-    os << "Partial Start:" << start << std::endl;
-    std::cout << "Partial Start:" << start << std::endl;
-  }
-  for(auto end: end_frames_partial) {
-    os << "Partial Finish:" << end << std::endl;
-    std::cout << "Partial Finish:" << end << std::endl;
-  }
+  print_events(os);
 }
