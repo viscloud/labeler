@@ -27,6 +27,28 @@ std::pair<int64_t, int64_t> cur_event_interval;
 
 int64_t target_frame_number = 0;
 
+void display_status_text() {
+  std::string status_bar_text = "";
+  if(cur_uncertain_interval.first >= 0) {
+    status_bar_text += "Uncertain tag start: " + std::to_string(cur_uncertain_interval.first) + ".";
+  }
+  if(cur_event_interval.first >= 0) {
+    status_bar_text += " Event tag start: " + std::to_string(cur_event_interval.first) + ".";
+  }
+  if(status_bar_text == "") {
+    status_bar_text = "No tags open";
+  }
+  cv::displayStatusBar("video", status_bar_text, 0);
+}
+
+void delete_cur_uncertain(int state, void* data) {
+  cur_uncertain_interval.first = -1;
+  display_status_text();
+}
+void delete_cur_event(int state, void* data) {
+  cur_event_interval.first = -1;
+  display_status_text();
+}
 constexpr int warning_overlay_duration = 2000;
 void uncertain_interval_start(int state, void* data) {
   int64_t frame_number = *(int64_t*)data;
@@ -36,6 +58,7 @@ void uncertain_interval_start(int state, void* data) {
   } else {
     cur_uncertain_interval.first = frame_number;
   }
+  display_status_text();
 }
 
 void uncertain_interval_end(int state, void* data) {
@@ -48,6 +71,7 @@ void uncertain_interval_end(int state, void* data) {
     cur_uncertain_interval.first = -1;
     cur_uncertain_interval.second = -1;
   }
+  display_status_text();
 }
 
 void event_interval_start(int state, void* data) {
@@ -58,6 +82,7 @@ void event_interval_start(int state, void* data) {
   } else {
     cur_event_interval.first = frame_number;
   }
+  display_status_text();
 }
 
 void event_interval_end(int state, void* data) {
@@ -70,6 +95,7 @@ void event_interval_end(int state, void* data) {
     cur_event_interval.first = -1;
     cur_event_interval.second = -1;
   }
+  display_status_text();
 }
 
 void play_button_callback(int state, void* data) {
@@ -86,15 +112,18 @@ void pause_button_callback(int state, void* data) {
 constexpr int frameskip_max = 900;
 int frameskip = 0;
 
+// TODO: merge the lists
 void print_events(std::ostream &stream) {
   for(int i = 0; i < event_intervals.size(); i++) {
     stream << "(" << event_intervals.at(i).first  << ", "
                   << event_intervals.at(i).second << ") - Event "
-                                                  << i;
+                                                  << i
+                                                  << std::endl;
   }
   for(int i = 0; i < uncertain_intervals.size(); i++) {
     stream << "(" << uncertain_intervals.at(i).first  << ", "
-                  << uncertain_intervals.at(i).second << ") - Uncertain";
+                  << uncertain_intervals.at(i).second << ") - Uncertain"
+                                                      << std::endl;
   }
 }
 
@@ -185,16 +214,21 @@ int main(int argc, char* argv[]) {
   cv::VideoCapture vc(argv[1]);
   vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
 
-  cv::createButton("Uncertainty Start (a)", uncertain_interval_start, &frame_id);
-  cv::createButton("Event Start (s)", event_interval_start, &frame_id);
-  cv::createButton("Event End (d)", event_interval_end, &frame_id);
-  cv::createButton("Uncertainty End (f)", uncertain_interval_end, &frame_id);
+  cv::createButton("uncertainty start (a)", uncertain_interval_start, &frame_id);
+  cv::createButton("event start (s)", event_interval_start, &frame_id);
+  cv::createButton("event end (d)", event_interval_end, &frame_id);
+  cv::createButton("uncertainty end (f)", uncertain_interval_end, &frame_id);
   cv::createTrackbar("Skip this many frames per 30 played", nullptr, &frameskip, frameskip_max, nullptr);
+  cv::createButton("Delete uncertainty start", delete_cur_uncertain, &frame_id);
+  cv::createButton("Delete event start", delete_cur_event, &frame_id);
+  int dummy;
+  cv::createTrackbar("Separator", nullptr, &dummy, 1, nullptr);
   cv::createButton("Play", play_button_callback);
   cv::createButton("Pause", pause_button_callback, &frame_id);
   //cv::createButton("Return", button1_callback);
   //cv::createButton("Goto prev event", button1_callback);
   //cv::createButton("Seek to event ckpt", button1_callback);
+  // Display status bar
   while(true) {
     if(frame_id < target_frame_number) {
       if(frameskip == 0) {
@@ -265,4 +299,5 @@ int main(int argc, char* argv[]) {
     }
   }
   print_events(os);
+  print_events(std::cout);
 }
