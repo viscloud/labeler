@@ -111,15 +111,6 @@ void event_interval_end(int state, void* data) {
   display_status_text(frame_number);
 }
 
-void play_button_callback(int state, void* data) {
-  target_frame_number = INT64_MAX;
-}
-
-void pause_button_callback(int state, void* data) {
-  int64_t frame_number = *(int64_t*)data;
-  target_frame_number = frame_number;
-}
-
 // TODO: this loop should probably be backwards for efficiency
 void goto_prev_event(int state, void* data) {
   int64_t frame_number = *(int64_t*)data;
@@ -200,6 +191,27 @@ void goto_next_uncertainty(int state, void* data) {
 // Variables related to the frameskip slider
 constexpr int frameskip_max = 900;
 int frameskip = 0;
+constexpr int seek_interval_max = 900;
+int seek_interval = 30;
+
+void play_button_callback(int state, void* data) {
+  target_frame_number = INT64_MAX;
+}
+
+void pause_button_callback(int state, void* data) {
+  int64_t frame_number = *(int64_t*)data;
+  target_frame_number = frame_number;
+}
+
+void seek_forward(int state, void* data) {
+  int64_t frame_number = *(int64_t*)data;
+  target_frame_number = frame_number + seek_interval;
+}
+
+void seek_backward(int state, void* data) {
+  int64_t frame_number = *(int64_t*)data;
+  target_frame_number = frame_number - seek_interval;
+}
 
 // TODO: merge the lists
 void print_events(std::ostream &stream) {
@@ -310,10 +322,12 @@ int main(int argc, char* argv[]) {
   cv::createTrackbar("Skip this many frames per 30 played", nullptr, &frameskip, frameskip_max, nullptr);
   cv::createButton("Delete uncertainty start", delete_cur_uncertain, &frame_id);
   cv::createButton("Delete event start", delete_cur_event, &frame_id);
-  int dummy;
-  cv::createTrackbar("Separator", nullptr, &dummy, 1, nullptr);
+  cv::createTrackbar("Seek interval", nullptr, &seek_interval, seek_interval_max, nullptr);
   cv::createButton("Play", play_button_callback);
   cv::createButton("Pause", pause_button_callback, &frame_id);
+  cv::createButton("Seek forward", seek_forward, &frame_id);
+  cv::createButton("Seek backward", seek_backward, &frame_id);
+  int dummy = 0;
   cv::createTrackbar("Separator", nullptr, &dummy, 1, nullptr);
   cv::createButton("Go to previous event", goto_prev_event, &frame_id);
   cv::createButton("Go to previous uncertainty", goto_prev_uncertainty, &frame_id);
@@ -374,9 +388,9 @@ int main(int argc, char* argv[]) {
     } else if(command == 'l') {
       target_frame_number += 1;
     } else if(command == 'n') {
-      target_frame_number += frameskip * 30;
+      seek_forward(-1, &frame_id);
     } else if(command == 'b') {
-      target_frame_number -= frameskip * 30;
+      seek_backward(-1, &frame_id);
     } else if(command == 'q') {
       break;
     } else if(command == 's') {
