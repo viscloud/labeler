@@ -25,9 +25,11 @@ std::pair<int64_t, int64_t> cur_uncertain_interval;
 std::vector<std::pair<int64_t, int64_t>> event_intervals;
 std::pair<int64_t, int64_t> cur_event_interval;
 
+std::unordered_map<int64_t, std::vector<std::string>> labels;
+
 int64_t target_frame_number = 0;
 
-void display_status_text() {
+void display_status_text(int64_t frame_id) {
   std::string status_bar_text = "";
   if(cur_uncertain_interval.first >= 0) {
     status_bar_text += "Uncertain tag start: " + std::to_string(cur_uncertain_interval.first) + ".";
@@ -38,16 +40,23 @@ void display_status_text() {
   if(status_bar_text == "") {
     status_bar_text = "No tags open";
   }
+  for(int i = 0; i < labels[frame_id].size(); ++i) {
+    status_bar_text += " " + labels[frame_id].at(i);
+  }
   cv::displayStatusBar("video", status_bar_text, 0);
 }
 
 void delete_cur_uncertain(int state, void* data) {
+  int64_t frame_number = *(int64_t*)data;
+  labels[cur_uncertain_interval.first].pop_back();
   cur_uncertain_interval.first = -1;
-  display_status_text();
+  display_status_text(frame_number);
 }
 void delete_cur_event(int state, void* data) {
+  int64_t frame_number = *(int64_t*)data;
+  labels[cur_event_interval.first].pop_back();
   cur_event_interval.first = -1;
-  display_status_text();
+  display_status_text(frame_number);
 }
 constexpr int warning_overlay_duration = 2000;
 void uncertain_interval_start(int state, void* data) {
@@ -57,8 +66,9 @@ void uncertain_interval_start(int state, void* data) {
     cv::displayOverlay("video", "Please close the existing uncertain interval before starting a new one", warning_overlay_duration);
   } else {
     cur_uncertain_interval.first = frame_number;
+    labels[frame_number].push_back("Uncertain interval #" + std::to_string(uncertain_intervals.size()) + " start.");
   }
-  display_status_text();
+  display_status_text(frame_number);
 }
 
 void uncertain_interval_end(int state, void* data) {
@@ -68,10 +78,11 @@ void uncertain_interval_end(int state, void* data) {
   } else {
     cur_uncertain_interval.second = frame_number;
     uncertain_intervals.push_back(cur_uncertain_interval);
+    labels[frame_number].push_back("Uncertain interval #" + std::to_string(uncertain_intervals.size() - 1) + " end.");
     cur_uncertain_interval.first = -1;
     cur_uncertain_interval.second = -1;
   }
-  display_status_text();
+  display_status_text(frame_number);
 }
 
 void event_interval_start(int state, void* data) {
@@ -81,8 +92,9 @@ void event_interval_start(int state, void* data) {
     cv::displayOverlay("video", "Please close the existing event interval before starting a new one", warning_overlay_duration);
   } else {
     cur_event_interval.first = frame_number;
+    labels[frame_number].push_back("Event interval #" + std::to_string(uncertain_intervals.size()) + " start.");
   }
-  display_status_text();
+  display_status_text(frame_number);
 }
 
 void event_interval_end(int state, void* data) {
@@ -92,10 +104,11 @@ void event_interval_end(int state, void* data) {
   } else {
     cur_event_interval.second = frame_number;
     event_intervals.push_back(cur_event_interval);
+    labels[frame_number].push_back("Event interval #" + std::to_string(event_intervals.size() - 1) + " end.");
     cur_event_interval.first = -1;
     cur_event_interval.second = -1;
   }
-  display_status_text();
+  display_status_text(frame_number);
 }
 
 void play_button_callback(int state, void* data) {
@@ -107,6 +120,82 @@ void pause_button_callback(int state, void* data) {
   target_frame_number = frame_number;
 }
 
+// TODO: this loop should probably be backwards for efficiency
+void goto_prev_event(int state, void* data) {
+  int64_t frame_number = *(int64_t*)data;
+  int64_t min_dist = INT64_MAX;
+  if(event_intervals.size() == 0) {
+    cv::displayOverlay("video", "No events.", warning_overlay_duration);
+    return;
+  }
+  for(int i = 0; i < event_intervals.size(); ++i) {
+    if(frame_number < event_intervals.at(i).first)
+      continue;
+    if(frame_number - event_intervals.at(i).first < min_dist) {
+      target_frame_number = event_intervals.at(i).first;
+    }
+  }
+  if(min_dist == INT64_MAX) {
+    cv::displayOverlay("video", "You are at the first event.", warning_overlay_duration);
+  }
+}
+
+void goto_prev_uncertainty(int state, void* data) {
+  int64_t frame_number = *(int64_t*)data;
+  int64_t min_dist = INT64_MAX;
+  if(uncertain_intervals.size() == 0) {
+    cv::displayOverlay("video", "No uncertainties.", warning_overlay_duration);
+    return;
+  }
+  for(int i = 0; i < uncertain_intervals.size(); ++i) {
+    if(frame_number < uncertain_intervals.at(i).first)
+      continue;
+    if(frame_number - uncertain_intervals.at(i).first < min_dist) {
+      target_frame_number = uncertain_intervals.at(i).first;
+    }
+  }
+  if(min_dist == INT64_MAX) {
+    cv::displayOverlay("video", "You are at the first uncertainty.", warning_overlay_duration);
+  }
+}
+
+void goto_next_event(int state, void* data) {
+  int64_t frame_number = *(int64_t*)data;
+  int64_t min_dist = INT64_MAX;
+  if(event_intervals.size() == 0) {
+    cv::displayOverlay("video", "No events.", warning_overlay_duration);
+    return;
+  }
+  for(int i = 0; i < event_intervals.size(); ++i) {
+    if(frame_number > event_intervals.at(i).first)
+      continue;
+    if(event_intervals.at(i).first - frame_number < min_dist) {
+      target_frame_number = event_intervals.at(i).first;
+    }
+  }
+  if(min_dist == INT64_MAX) {
+    cv::displayOverlay("video", "You are at the last event.", warning_overlay_duration);
+  }
+}
+
+void goto_next_uncertainty(int state, void* data) {
+  int64_t frame_number = *(int64_t*)data;
+  int64_t min_dist = INT64_MAX;
+  if(uncertain_intervals.size() == 0) {
+    cv::displayOverlay("video", "No uncertainties.", warning_overlay_duration);
+    return;
+  }
+  for(int i = 0; i < uncertain_intervals.size(); ++i) {
+    if(frame_number > uncertain_intervals.at(i).first)
+      continue;
+    if(uncertain_intervals.at(i).first - frame_number < min_dist) {
+      target_frame_number = uncertain_intervals.at(i).first;
+    }
+  }
+  if(min_dist == INT64_MAX) {
+    cv::displayOverlay("video", "You are at the last uncertainty.", warning_overlay_duration);
+  }
+}
 
 // Variables related to the frameskip slider
 constexpr int frameskip_max = 900;
@@ -225,21 +314,28 @@ int main(int argc, char* argv[]) {
   cv::createTrackbar("Separator", nullptr, &dummy, 1, nullptr);
   cv::createButton("Play", play_button_callback);
   cv::createButton("Pause", pause_button_callback, &frame_id);
+  cv::createTrackbar("Separator", nullptr, &dummy, 1, nullptr);
+  cv::createButton("Go to previous event", goto_prev_event, &frame_id);
+  cv::createButton("Go to previous uncertainty", goto_prev_uncertainty, &frame_id);
+  cv::createButton("Go to next event", goto_next_event, &frame_id);
+  cv::createButton("Go to next uncertainty", goto_next_uncertainty, &frame_id);
   //cv::createButton("Return", button1_callback);
   //cv::createButton("Goto prev event", button1_callback);
   //cv::createButton("Seek to event ckpt", button1_callback);
   // Display status bar
   while(true) {
+    display_status_text(frame_id);
     if(frame_id < target_frame_number) {
       if(frameskip == 0) {
         vc >> frame;
         frame_id += 1;
       } else {
         frames_to_skip += (double)frameskip / 30;
-        frame_id += 1;
         if(frames_to_skip >= 1) {
           frame_id += frames_to_skip;
           frames_to_skip = 0;
+        } else {
+          frame_id += 1;
         }
         if(frame_id > target_frame_number)
           frame_id = target_frame_number;
@@ -252,6 +348,8 @@ int main(int argc, char* argv[]) {
       if(frames_to_skip >= 1) {
         frame_id -= frames_to_skip;
         frames_to_skip = 0;
+      } else {
+        frame_id -= 1;
       }
       if(frame_id < target_frame_number)
         frame_id = target_frame_number;
