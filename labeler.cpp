@@ -349,7 +349,7 @@ int main(int argc, char* argv[]) {
 
   // Parse arguments.
   cv::VideoCapture vc(argv[1]);
-  int64_t frame_id = argc == 2 ? atoi(argv[2]) : 0;
+  int64_t frame_id = argc == 3 ? atoi(argv[2]) : 0;
   vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
 
   cv::namedWindow("video", cv::WINDOW_AUTOSIZE | CV_GUI_EXPANDED);
