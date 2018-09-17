@@ -16,7 +16,7 @@
 #include <opencv2/opencv.hpp>
 
 // Constants.
-constexpr int HEIGHT = 720;
+constexpr int HEIGHT = 240;
 constexpr int WARNING_OVERLAY_DURATION = 2000;
 constexpr int FRAMESKIP_MAX = 900;
 constexpr int SEEK_INTERVAL_MAX = 900;
@@ -339,26 +339,20 @@ cv::Mat preprocess_frame(cv::Mat frame, int64_t frame_number) {
 }
 
 int main(int argc, char* argv[]) {
-  if (argc < 2) {
-    std::cout << "Usage: label input_video <start_frame (optional)>"
-              << std::endl;
+  if ((argc != 1) && (argc != 2)) {
+    std::cout << "Usage: ./label <input_video> [<start_frame>]" << std::endl;
+    return 1;
   }
+
   print_controls();
   std::signal(SIGINT, handler);
-  int64_t frame_id = argc > 2 ? atoi(argv[2]) : 0;
-  double frames_to_skip = 0;
-  target_frame_number = frame_id;
-  cv::Mat frame;
 
-  cur_uncertain_interval.first = -1;
-  cur_uncertain_interval.second = -1;
-  cur_event_interval.first = -1;
-  cur_event_interval.second = -1;
-
-  cv::namedWindow("video", cv::WINDOW_AUTOSIZE | CV_GUI_EXPANDED);
+  // Parse arguments.
   cv::VideoCapture vc(argv[1]);
+  int64_t frame_id = argc == 2 ? atoi(argv[2]) : 0;
   vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
 
+  cv::namedWindow("video", cv::WINDOW_AUTOSIZE | CV_GUI_EXPANDED);
   cv::createButton("uncertainty start (a)", uncertain_interval_start,
                    &frame_id);
   cv::createButton("event start (s)", event_interval_start, &frame_id);
@@ -381,10 +375,15 @@ int main(int argc, char* argv[]) {
                    &frame_id);
   cv::createButton("Go to next event", goto_next_event, &frame_id);
   cv::createButton("Go to next uncertainty", goto_next_uncertainty, &frame_id);
-  // cv::createButton("Return", button1_callback);
-  // cv::createButton("Goto prev event", button1_callback);
-  // cv::createButton("Seek to event ckpt", button1_callback);
-  // Display status bar
+
+  cv::Mat frame;
+  double frames_to_skip = 0;
+  target_frame_number = frame_id;
+  cur_uncertain_interval.first = -1;
+  cur_uncertain_interval.second = -1;
+  cur_event_interval.first = -1;
+  cur_event_interval.second = -1;
+
   while (true) {
     display_status_text(frame_id);
     if (frame_id < target_frame_number) {
@@ -456,6 +455,7 @@ int main(int argc, char* argv[]) {
       // do nothing
     }
   }
+
   print_events(os);
   print_events(std::cout);
 }
