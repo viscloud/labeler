@@ -15,23 +15,21 @@
 
 #include <opencv2/opencv.hpp>
 
-#define HEIGHT 720
+// Constants.
+constexpr int HEIGHT = 720;
+constexpr int WARNING_OVERLAY_DURATION = 2000;
+constexpr int FRAMESKIP_MAX = 900;
+constexpr int SEEK_INTERVAL_MAX = 900;
 
+// Global variables. Why?!?!?!
 std::ofstream os("labels.dat");
-
 std::vector<std::pair<int64_t, int64_t>> uncertain_intervals;
 std::pair<int64_t, int64_t> cur_uncertain_interval;
-
 std::vector<std::pair<int64_t, int64_t>> event_intervals;
 std::pair<int64_t, int64_t> cur_event_interval;
-
 std::unordered_map<int64_t, std::vector<std::string>> labels;
 int64_t target_frame_number = 0;
-constexpr int warning_overlay_duration = 2000;
-// Variables related to the frameskip slider
-constexpr int frameskip_max = 900;
 int frameskip = 0;
-constexpr int seek_interval_max = 900;
 int seek_interval = 30;
 double prev_microseconds = 0;
 int64_t prev_frame_number = 0;
@@ -50,13 +48,17 @@ void display_status_text(int64_t frame_id) {
   if (status_bar_text == "") {
     status_bar_text = "No tags open";
   }
-  for (int i = 0; i < labels[frame_id].size(); ++i) {
-    status_bar_text += " " + labels[frame_id].at(i);
+
+  auto labels_for_frame = labels[frame_id];
+  for (decltype(labels_for_frame.size()) i = 0; i < labels_for_frame.size();
+       ++i) {
+    status_bar_text += " " + labels_for_frame.at(i);
   }
   cv::displayStatusBar("video", status_bar_text, 0);
 }
 
 void delete_cur_uncertain(int state, void* data) {
+  (void)state;
   int64_t frame_number = *(int64_t*)data;
   labels[cur_uncertain_interval.first].pop_back();
   cur_uncertain_interval.first = -1;
@@ -64,6 +66,7 @@ void delete_cur_uncertain(int state, void* data) {
 }
 
 void delete_cur_event(int state, void* data) {
+  (void)state;
   int64_t frame_number = *(int64_t*)data;
   labels[cur_event_interval.first].pop_back();
   cur_event_interval.first = -1;
@@ -71,13 +74,14 @@ void delete_cur_event(int state, void* data) {
 }
 
 void uncertain_interval_start(int state, void* data) {
+  (void)state;
   int64_t frame_number = *(int64_t*)data;
   // Do verification that we're not in a bad state
   if (cur_uncertain_interval.first >= 0) {
     cv::displayOverlay("video",
                        "Please close the existing uncertain interval before "
                        "starting a new one",
-                       warning_overlay_duration);
+                       WARNING_OVERLAY_DURATION);
   } else {
     cur_uncertain_interval.first = frame_number;
     labels[frame_number].push_back("Uncertain interval #" +
@@ -88,11 +92,12 @@ void uncertain_interval_start(int state, void* data) {
 }
 
 void uncertain_interval_end(int state, void* data) {
+  (void)state;
   int64_t frame_number = *(int64_t*)data;
   if (cur_uncertain_interval.first < 0) {
     cv::displayOverlay("video",
                        "Cannot end uncertain interval: start not specified",
-                       warning_overlay_duration);
+                       WARNING_OVERLAY_DURATION);
   } else {
     cur_uncertain_interval.second = frame_number;
     uncertain_intervals.push_back(cur_uncertain_interval);
@@ -106,13 +111,14 @@ void uncertain_interval_end(int state, void* data) {
 }
 
 void event_interval_start(int state, void* data) {
+  (void)state;
   int64_t frame_number = *(int64_t*)data;
   // Do verification that we're not in a bad state
   if (cur_event_interval.first >= 0) {
     cv::displayOverlay(
         "video",
         "Please close the existing event interval before starting a new one",
-        warning_overlay_duration);
+        WARNING_OVERLAY_DURATION);
   } else {
     cur_event_interval.first = frame_number;
     labels[frame_number].push_back("Event interval #" +
@@ -123,11 +129,12 @@ void event_interval_start(int state, void* data) {
 }
 
 void event_interval_end(int state, void* data) {
+  (void)state;
   int64_t frame_number = *(int64_t*)data;
   if (cur_event_interval.first < 0) {
     cv::displayOverlay("video",
                        "Cannot end event interval: start not specified",
-                       warning_overlay_duration);
+                       WARNING_OVERLAY_DURATION);
   } else {
     cur_event_interval.second = frame_number;
     event_intervals.push_back(cur_event_interval);
@@ -142,13 +149,15 @@ void event_interval_end(int state, void* data) {
 
 // TODO: this loop should probably be backwards for efficiency
 void goto_prev_event(int state, void* data) {
+  (void)state;
   int64_t frame_number = *(int64_t*)data;
   int64_t min_dist = INT64_MAX;
   if (event_intervals.size() == 0) {
-    cv::displayOverlay("video", "No events.", warning_overlay_duration);
+    cv::displayOverlay("video", "No events.", WARNING_OVERLAY_DURATION);
     return;
   }
-  for (int i = 0; i < event_intervals.size(); ++i) {
+  for (decltype(event_intervals.size()) i = 0; i < event_intervals.size();
+       ++i) {
     if (frame_number < event_intervals.at(i).first) continue;
     if (frame_number - event_intervals.at(i).first < min_dist) {
       target_frame_number = event_intervals.at(i).first;
@@ -156,18 +165,20 @@ void goto_prev_event(int state, void* data) {
   }
   if (min_dist == INT64_MAX) {
     cv::displayOverlay("video", "You are at the first event.",
-                       warning_overlay_duration);
+                       WARNING_OVERLAY_DURATION);
   }
 }
 
 void goto_prev_uncertainty(int state, void* data) {
+  (void)state;
   int64_t frame_number = *(int64_t*)data;
   int64_t min_dist = INT64_MAX;
   if (uncertain_intervals.size() == 0) {
-    cv::displayOverlay("video", "No uncertainties.", warning_overlay_duration);
+    cv::displayOverlay("video", "No uncertainties.", WARNING_OVERLAY_DURATION);
     return;
   }
-  for (int i = 0; i < uncertain_intervals.size(); ++i) {
+  for (decltype(uncertain_intervals.size()) i = 0;
+       i < uncertain_intervals.size(); ++i) {
     if (frame_number < uncertain_intervals.at(i).first) continue;
     if (frame_number - uncertain_intervals.at(i).first < min_dist) {
       target_frame_number = uncertain_intervals.at(i).first;
@@ -175,18 +186,20 @@ void goto_prev_uncertainty(int state, void* data) {
   }
   if (min_dist == INT64_MAX) {
     cv::displayOverlay("video", "You are at the first uncertainty.",
-                       warning_overlay_duration);
+                       WARNING_OVERLAY_DURATION);
   }
 }
 
 void goto_next_event(int state, void* data) {
+  (void)state;
   int64_t frame_number = *(int64_t*)data;
   int64_t min_dist = INT64_MAX;
   if (event_intervals.size() == 0) {
-    cv::displayOverlay("video", "No events.", warning_overlay_duration);
+    cv::displayOverlay("video", "No events.", WARNING_OVERLAY_DURATION);
     return;
   }
-  for (int i = 0; i < event_intervals.size(); ++i) {
+  for (decltype(event_intervals.size()) i = 0; i < event_intervals.size();
+       ++i) {
     if (frame_number > event_intervals.at(i).first) continue;
     if (event_intervals.at(i).first - frame_number < min_dist) {
       target_frame_number = event_intervals.at(i).first;
@@ -194,18 +207,20 @@ void goto_next_event(int state, void* data) {
   }
   if (min_dist == INT64_MAX) {
     cv::displayOverlay("video", "You are at the last event.",
-                       warning_overlay_duration);
+                       WARNING_OVERLAY_DURATION);
   }
 }
 
 void goto_next_uncertainty(int state, void* data) {
+  (void)state;
   int64_t frame_number = *(int64_t*)data;
   int64_t min_dist = INT64_MAX;
   if (uncertain_intervals.size() == 0) {
-    cv::displayOverlay("video", "No uncertainties.", warning_overlay_duration);
+    cv::displayOverlay("video", "No uncertainties.", WARNING_OVERLAY_DURATION);
     return;
   }
-  for (int i = 0; i < uncertain_intervals.size(); ++i) {
+  for (decltype(uncertain_intervals.size()) i = 0;
+       i < uncertain_intervals.size(); ++i) {
     if (frame_number > uncertain_intervals.at(i).first) continue;
     if (uncertain_intervals.at(i).first - frame_number < min_dist) {
       target_frame_number = uncertain_intervals.at(i).first;
@@ -213,43 +228,53 @@ void goto_next_uncertainty(int state, void* data) {
   }
   if (min_dist == INT64_MAX) {
     cv::displayOverlay("video", "You are at the last uncertainty.",
-                       warning_overlay_duration);
+                       WARNING_OVERLAY_DURATION);
   }
 }
 
 void play_button_callback(int state, void* data) {
+  (void)state;
+  (void)data;
   target_frame_number = INT64_MAX;
 }
 
 void pause_button_callback(int state, void* data) {
+  (void)state;
   int64_t frame_number = *(int64_t*)data;
   target_frame_number = frame_number;
 }
 
 void seek_forward(int state, void* data) {
+  (void)state;
   int64_t frame_number = *(int64_t*)data;
   target_frame_number = frame_number + seek_interval;
 }
 
 void seek_backward(int state, void* data) {
+  (void)state;
   int64_t frame_number = *(int64_t*)data;
   target_frame_number = frame_number - seek_interval;
 }
 
 // TODO: merge the lists
 void print_events(std::ostream& stream) {
-  for (int i = 0; i < event_intervals.size(); i++) {
+  for (decltype(event_intervals.size()) i = 0; i < event_intervals.size();
+       i++) {
     stream << "(" << event_intervals.at(i).first << ", "
            << event_intervals.at(i).second << ") - Event " << i << std::endl;
   }
-  for (int i = 0; i < uncertain_intervals.size(); i++) {
+  for (decltype(uncertain_intervals.size()) i = 0;
+       i < uncertain_intervals.size(); i++) {
     stream << "(" << uncertain_intervals.at(i).first << ", "
            << uncertain_intervals.at(i).second << ") - Uncertain" << std::endl;
   }
 }
 
 // Gracefully handle termination
-void handler(int signal) { print_events(std::cout); }
+void handler(int signal) {
+  (void)signal;
+  print_events(std::cout);
+}
 
 // Calculate fps
 double get_fps(int64_t frame_number) {
@@ -323,7 +348,6 @@ int main(int argc, char* argv[]) {
   int64_t frame_id = argc > 2 ? atoi(argv[2]) : 0;
   double frames_to_skip = 0;
   target_frame_number = frame_id;
-  int64_t saved_tag = frame_id;
   cv::Mat frame;
 
   cur_uncertain_interval.first = -1;
@@ -341,11 +365,11 @@ int main(int argc, char* argv[]) {
   cv::createButton("event end (d)", event_interval_end, &frame_id);
   cv::createButton("uncertainty end (f)", uncertain_interval_end, &frame_id);
   cv::createTrackbar("Skip this many frames per 30 played", nullptr, &frameskip,
-                     frameskip_max, nullptr);
+                     FRAMESKIP_MAX, nullptr);
   cv::createButton("Delete uncertainty start", delete_cur_uncertain, &frame_id);
   cv::createButton("Delete event start", delete_cur_event, &frame_id);
   cv::createTrackbar("Seek interval", nullptr, &seek_interval,
-                     seek_interval_max, nullptr);
+                     SEEK_INTERVAL_MAX, nullptr);
   cv::createButton("Play", play_button_callback);
   cv::createButton("Pause", pause_button_callback, &frame_id);
   cv::createButton("Seek forward", seek_forward, &frame_id);
