@@ -31,5 +31,13 @@
 *.out
 *.app
 
+# Generated files
 label
+*.dat
+
+# Vim swap files
 *.swp
+
+# Emacs autosave files
+*~
+\#*\#
