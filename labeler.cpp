@@ -16,7 +16,7 @@
 #include <opencv2/opencv.hpp>
 
 // Constants.
-constexpr int HEIGHT = 240;
+constexpr int HEIGHT = 480;
 constexpr int WARNING_OVERLAY_DURATION = 2000;
 constexpr int FRAMESKIP_MAX = 900;
 constexpr int SEEK_INTERVAL_MAX = 900;
