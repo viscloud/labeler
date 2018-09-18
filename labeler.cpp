@@ -1,17 +1,12 @@
 
 #include <stdlib.h>
 #include <sys/time.h>
-#include <atomic>
-#include <cmath>
 #include <csignal>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
-#include <memory>
 #include <sstream>
 #include <string>
-#include <thread>
-#include <utility>
 #include <vector>
 
 #include <boost/program_options.hpp>
