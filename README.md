@@ -10,9 +10,10 @@ for the various datasets that the `viscloud` organization uses.
 
 ### 2. Compile
 
-`labeler.cpp` requires boost program_options and OpenCV with Qt support.
-Most likely, you will need to compile Qt and OpenCV from source. If your
-environment is already set up, then skip to section 2.4.
+In addition to basic toolchain components, `labeler.cpp` requires boost
+program_options and OpenCV with Qt support. Most likely, you will need to
+compile Qt and OpenCV from source. If your environment is already set up,
+then skip to section 2.4.
 
 #### 2.1. Install boost program_options
 
