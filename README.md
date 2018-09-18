@@ -29,7 +29,7 @@ brew install boost
 #### 2.2. Clone and compile Qt. More info: [qt5 repo](https://github.com/qt/qt5)
 
 ```sh
-git clone git@github.com:qt/qt5
+git clone https://github.com/qt/qt5.git
 cd qt5
 git checkout 5.11
 git submodule update --init
@@ -41,7 +41,7 @@ make
 #### 2.3. Clone and compile OpenCV with Qt support. More info: [OpenCV documentation](https://docs.opencv.org/3.4.1/d7/d9f/tutorial_linux_install.html)
 
 ```sh
-git clone git@github.com:opencv/opencv
+git clone https://github.com/opencv/opencv.git
 cd opencv
 git checkout 3.3.0
 mkdir build
