@@ -14,7 +14,7 @@ for the various datasets that the `viscloud` organization uses.
 Most likely, you will need to compile Qt and OpenCV from source. If your
 environment is already set up, then skip to section 2.4.
 
-#### 2.1 Install boost program_options
+#### 2.1. Install boost program_options
 
 Ubuntu:
 ```sh
@@ -26,7 +26,7 @@ macOS:
 brew install boost
 ```
 
-#### 2.2 Clone and compile Qt. More info: [qt5 repo](https://github.com/qt/qt5)
+#### 2.2. Clone and compile Qt. More info: [qt5 repo](https://github.com/qt/qt5)
 
 ```sh
 git clone git@github.com:qt/qt5
