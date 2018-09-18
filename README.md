@@ -49,7 +49,7 @@ git checkout 3.3.0
 mkdir build
 cd build
 export QT_DIR=<path to Qt5 repo>
-cmake -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=/usr/local \
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local \
   -DQT_QMAKE_EXECUTABLE=$QT_DIR/qtbase/bin/qmake \
   -DQt5Concurrent_DIR=$QT_DIR/qtbase/lib/cmake/Qt5Concurrent \
   -DQt5Core_DIR=$QT_DIR/qtbase/lib/cmake/Qt5Core \
