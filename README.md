@@ -55,3 +55,13 @@ sudo make install
 git clone git@github.com:viscloud/labeler
 make
 ```
+
+### 3. Running
+
+The labeler accepts an input video file, an output file that will be
+generated, and, optionally, a frame number to start at.
+
+```sh
+
+./labeler --video <path to video file> --out <path to output file> [--start-frame <frame number>]
+```
