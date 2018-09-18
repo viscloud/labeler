@@ -31,9 +31,8 @@
 *.out
 *.app
 
-# Generated files
-label
-*.dat
+# Generated binary.
+labeler
 
 # Vim swap files
 *.swp
