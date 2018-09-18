@@ -1,4 +1,5 @@
 
+#include <stdlib.h>
 #include <sys/time.h>
 #include <atomic>
 #include <cmath>
@@ -13,7 +14,10 @@
 #include <utility>
 #include <vector>
 
+#include <boost/program_options.hpp>
 #include <opencv2/opencv.hpp>
+
+namespace po = boost::program_options;
 
 // Constants.
 constexpr int HEIGHT = 480;
@@ -21,8 +25,8 @@ constexpr int WARNING_OVERLAY_DURATION = 2000;
 constexpr int FRAMESKIP_MAX = 900;
 constexpr int SEEK_INTERVAL_MAX = 900;
 
-// Global variables. Why?!?!?!
-std::ofstream os("labels.dat");
+// Global variables. Why, Thomas?!?!?!
+std::ofstream os;
 std::vector<std::pair<int64_t, int64_t>> uncertain_intervals;
 std::pair<int64_t, int64_t> cur_uncertain_interval;
 std::vector<std::pair<int64_t, int64_t>> event_intervals;
@@ -339,18 +343,47 @@ cv::Mat preprocess_frame(cv::Mat frame, int64_t frame_number) {
 }
 
 int main(int argc, char* argv[]) {
-  if ((argc != 1) && (argc != 2)) {
-    std::cout << "Usage: ./label <input_video> [<start_frame>]" << std::endl;
+  po::options_description desc("Labels event intervals.");
+  desc.add_options()("help,h", "Print the help message.");
+  desc.add_options()("video,v", po::value<std::string>()->required(),
+                     "Path to the video to label.");
+  desc.add_options()("start-frame,s", po::value<int>()->default_value(0),
+                     "Frame at which to start labeling.");
+  desc.add_options()("out,o", po::value<std::string>()->required(),
+                     "Path to output file.");
+
+  // Parse the command line arguments.
+  po::variables_map args;
+  try {
+    po::store(po::parse_command_line(argc, argv, desc), args);
+    if (args.count("help")) {
+      std::cout << desc << std::endl;
+      return 0;
+    }
+    po::notify(args);
+  } catch (const po::error& e) {
+    std::cerr << e.what() << std::endl;
+    std::cout << desc << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  auto in_filepath = args["video"].as<std::string>();
+  auto start_frame = args["start-frame"].as<int>();
+  if (start_frame < 0) {
+    std::cerr << "\"--start-frame\" cannot be negative, but is: "
+              << std::to_string(start_frame) << std::endl;
     return 1;
   }
+  auto out_filepath = args["out"].as<std::string>();
 
   print_controls();
   std::signal(SIGINT, handler);
 
   // Parse arguments.
-  cv::VideoCapture vc(argv[1]);
-  int64_t frame_id = argc == 3 ? atoi(argv[2]) : 0;
+  cv::VideoCapture vc(in_filepath);
+  int64_t frame_id = (int64_t)start_frame;
   vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
+  os = std::ofstream(out_filepath);
 
   cv::namedWindow("video", cv::WINDOW_AUTOSIZE | CV_GUI_EXPANDED);
   cv::createButton("uncertainty start (a)", uncertain_interval_start,
@@ -458,4 +491,6 @@ int main(int argc, char* argv[]) {
 
   print_events(os);
   print_events(std::cout);
+
+  return 0;
 }
