@@ -10,12 +10,23 @@ for the various datasets that the `viscloud` organization uses.
 
 ### 2. Compile
 
-`labeler.cpp` requires OpenCV with Qt support. Most likely, you will need to
-install Qt and OpenCV from source. If your installation of OpenCV is already
-built with Qt, then skip to section 2.3.
- for more information.
+`labeler.cpp` requires boost program_options and OpenCV with Qt support.
+Most likely, you will need to compile Qt and OpenCV from source. If your
+environment is already set up, then skip to section 2.4.
 
-#### 2.1 Clone and compile Qt. More info: [qt5 repo](https://github.com/qt/qt5)
+#### 2.1 Install boost program_options
+
+Ubuntu:
+```sh
+sudo apt install libboost-program-options-dev
+```
+
+macOS:
+```sh
+brew install boost
+```
+
+#### 2.2 Clone and compile Qt. More info: [qt5 repo](https://github.com/qt/qt5)
 
 ```sh
 git clone git@github.com:qt/qt5
@@ -27,7 +38,7 @@ make
 ```
 **Note:** This takes a long time.
 
-#### 2.2. Clone and compile OpenCV with Qt support. More info: [OpenCV documentation](https://docs.opencv.org/3.4.1/d7/d9f/tutorial_linux_install.html)
+#### 2.3. Clone and compile OpenCV with Qt support. More info: [OpenCV documentation](https://docs.opencv.org/3.4.1/d7/d9f/tutorial_linux_install.html)
 
 ```sh
 git clone git@github.com:opencv/opencv
@@ -49,7 +60,7 @@ make
 sudo make install
 ```
 
-#### 2.3. Clone and compile the labeler.
+#### 2.4. Clone and compile the labeler.
 
 ```sh
 git clone git@github.com:viscloud/labeler
