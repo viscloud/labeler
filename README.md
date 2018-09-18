@@ -34,7 +34,8 @@ git clone https://github.com/qt/qt5.git
 cd qt5
 git checkout 5.11
 git submodule update --init
-./configure -prefix $PWD/qtbase -opensource -nomake tests
+./configure -prefix $PWD/qtbase -opensource -confirm-license -nomake tests \
+  -nomake examples -skip qtconnectivity -skip qtwebengine
 make
 ```
 **Note:** This takes a long time.
