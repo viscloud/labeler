@@ -1,80 +1,295 @@
-#include <atomic>
-#include <cmath>
+
+#include <stdlib.h>
+#include <sys/time.h>
+#include <csignal>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
-#include <memory>
 #include <sstream>
 #include <string>
-#include <thread>
-#include <utility>
 #include <vector>
 
+#include <boost/program_options.hpp>
 #include <opencv2/opencv.hpp>
 
-#include <cstdint>
-#include <csignal>
+namespace po = boost::program_options;
 
-std::ofstream os("labels.dat");
+// Constants.
+constexpr int HEIGHT = 480;
+constexpr int WARNING_OVERLAY_DURATION = 2000;
+constexpr int FRAMESKIP_MAX = 900;
+constexpr int SEEK_INTERVAL_MAX = 900;
 
-std::set<int64_t> start_frames_full;
-std::set<int64_t> end_frames_full;
-std::set<int64_t> start_frames_partial;
-std::set<int64_t> end_frames_partial;
+// Global variables. Why, Thomas?!?!?!
+std::ofstream os;
+std::vector<std::pair<int64_t, int64_t>> uncertain_intervals;
+std::pair<int64_t, int64_t> cur_uncertain_interval;
+std::vector<std::pair<int64_t, int64_t>> event_intervals;
+std::pair<int64_t, int64_t> cur_event_interval;
+std::unordered_map<int64_t, std::vector<std::string>> labels;
+int64_t target_frame_number = 0;
+int frameskip = 0;
+int seek_interval = 30;
+double prev_microseconds = 0;
+int64_t prev_frame_number = 0;
 
+void display_status_text(int64_t frame_id) {
+  std::string status_bar_text = "";
+  if (cur_uncertain_interval.first >= 0) {
+    status_bar_text +=
+        "Uncertain tag start: " + std::to_string(cur_uncertain_interval.first) +
+        ".";
+  }
+  if (cur_event_interval.first >= 0) {
+    status_bar_text +=
+        " Event tag start: " + std::to_string(cur_event_interval.first) + ".";
+  }
+  if (status_bar_text == "") {
+    status_bar_text = "No tags open";
+  }
+
+  auto labels_for_frame = labels[frame_id];
+  for (decltype(labels_for_frame.size()) i = 0; i < labels_for_frame.size();
+       ++i) {
+    status_bar_text += " " + labels_for_frame.at(i);
+  }
+  cv::displayStatusBar("video", status_bar_text, 0);
+}
+
+void delete_cur_uncertain(int state, void* data) {
+  (void)state;
+  int64_t frame_number = *(int64_t*)data;
+  labels[cur_uncertain_interval.first].pop_back();
+  cur_uncertain_interval.first = -1;
+  display_status_text(frame_number);
+}
+
+void delete_cur_event(int state, void* data) {
+  (void)state;
+  int64_t frame_number = *(int64_t*)data;
+  labels[cur_event_interval.first].pop_back();
+  cur_event_interval.first = -1;
+  display_status_text(frame_number);
+}
+
+void uncertain_interval_start(int state, void* data) {
+  (void)state;
+  int64_t frame_number = *(int64_t*)data;
+  // Do verification that we're not in a bad state
+  if (cur_uncertain_interval.first >= 0) {
+    cv::displayOverlay("video",
+                       "Please close the existing uncertain interval before "
+                       "starting a new one",
+                       WARNING_OVERLAY_DURATION);
+  } else {
+    cur_uncertain_interval.first = frame_number;
+    labels[frame_number].push_back("Uncertain interval #" +
+                                   std::to_string(uncertain_intervals.size()) +
+                                   " start.");
+  }
+  display_status_text(frame_number);
+}
+
+void uncertain_interval_end(int state, void* data) {
+  (void)state;
+  int64_t frame_number = *(int64_t*)data;
+  if (cur_uncertain_interval.first < 0) {
+    cv::displayOverlay("video",
+                       "Cannot end uncertain interval: start not specified",
+                       WARNING_OVERLAY_DURATION);
+  } else {
+    cur_uncertain_interval.second = frame_number;
+    uncertain_intervals.push_back(cur_uncertain_interval);
+    labels[frame_number].push_back(
+        "Uncertain interval #" +
+        std::to_string(uncertain_intervals.size() - 1) + " end.");
+    cur_uncertain_interval.first = -1;
+    cur_uncertain_interval.second = -1;
+  }
+  display_status_text(frame_number);
+}
+
+void event_interval_start(int state, void* data) {
+  (void)state;
+  int64_t frame_number = *(int64_t*)data;
+  // Do verification that we're not in a bad state
+  if (cur_event_interval.first >= 0) {
+    cv::displayOverlay(
+        "video",
+        "Please close the existing event interval before starting a new one",
+        WARNING_OVERLAY_DURATION);
+  } else {
+    cur_event_interval.first = frame_number;
+    labels[frame_number].push_back("Event interval #" +
+                                   std::to_string(uncertain_intervals.size()) +
+                                   " start.");
+  }
+  display_status_text(frame_number);
+}
+
+void event_interval_end(int state, void* data) {
+  (void)state;
+  int64_t frame_number = *(int64_t*)data;
+  if (cur_event_interval.first < 0) {
+    cv::displayOverlay("video",
+                       "Cannot end event interval: start not specified",
+                       WARNING_OVERLAY_DURATION);
+  } else {
+    cur_event_interval.second = frame_number;
+    event_intervals.push_back(cur_event_interval);
+    labels[frame_number].push_back("Event interval #" +
+                                   std::to_string(event_intervals.size() - 1) +
+                                   " end.");
+    cur_event_interval.first = -1;
+    cur_event_interval.second = -1;
+  }
+  display_status_text(frame_number);
+}
+
+// TODO: this loop should probably be backwards for efficiency
+void goto_prev_event(int state, void* data) {
+  (void)state;
+  int64_t frame_number = *(int64_t*)data;
+  int64_t min_dist = INT64_MAX;
+  if (event_intervals.size() == 0) {
+    cv::displayOverlay("video", "No events.", WARNING_OVERLAY_DURATION);
+    return;
+  }
+  for (decltype(event_intervals.size()) i = 0; i < event_intervals.size();
+       ++i) {
+    if (frame_number < event_intervals.at(i).first) continue;
+    if (frame_number - event_intervals.at(i).first < min_dist) {
+      target_frame_number = event_intervals.at(i).first;
+    }
+  }
+  if (min_dist == INT64_MAX) {
+    cv::displayOverlay("video", "You are at the first event.",
+                       WARNING_OVERLAY_DURATION);
+  }
+}
+
+void goto_prev_uncertainty(int state, void* data) {
+  (void)state;
+  int64_t frame_number = *(int64_t*)data;
+  int64_t min_dist = INT64_MAX;
+  if (uncertain_intervals.size() == 0) {
+    cv::displayOverlay("video", "No uncertainties.", WARNING_OVERLAY_DURATION);
+    return;
+  }
+  for (decltype(uncertain_intervals.size()) i = 0;
+       i < uncertain_intervals.size(); ++i) {
+    if (frame_number < uncertain_intervals.at(i).first) continue;
+    if (frame_number - uncertain_intervals.at(i).first < min_dist) {
+      target_frame_number = uncertain_intervals.at(i).first;
+    }
+  }
+  if (min_dist == INT64_MAX) {
+    cv::displayOverlay("video", "You are at the first uncertainty.",
+                       WARNING_OVERLAY_DURATION);
+  }
+}
+
+void goto_next_event(int state, void* data) {
+  (void)state;
+  int64_t frame_number = *(int64_t*)data;
+  int64_t min_dist = INT64_MAX;
+  if (event_intervals.size() == 0) {
+    cv::displayOverlay("video", "No events.", WARNING_OVERLAY_DURATION);
+    return;
+  }
+  for (decltype(event_intervals.size()) i = 0; i < event_intervals.size();
+       ++i) {
+    if (frame_number > event_intervals.at(i).first) continue;
+    if (event_intervals.at(i).first - frame_number < min_dist) {
+      target_frame_number = event_intervals.at(i).first;
+    }
+  }
+  if (min_dist == INT64_MAX) {
+    cv::displayOverlay("video", "You are at the last event.",
+                       WARNING_OVERLAY_DURATION);
+  }
+}
+
+void goto_next_uncertainty(int state, void* data) {
+  (void)state;
+  int64_t frame_number = *(int64_t*)data;
+  int64_t min_dist = INT64_MAX;
+  if (uncertain_intervals.size() == 0) {
+    cv::displayOverlay("video", "No uncertainties.", WARNING_OVERLAY_DURATION);
+    return;
+  }
+  for (decltype(uncertain_intervals.size()) i = 0;
+       i < uncertain_intervals.size(); ++i) {
+    if (frame_number > uncertain_intervals.at(i).first) continue;
+    if (uncertain_intervals.at(i).first - frame_number < min_dist) {
+      target_frame_number = uncertain_intervals.at(i).first;
+    }
+  }
+  if (min_dist == INT64_MAX) {
+    cv::displayOverlay("video", "You are at the last uncertainty.",
+                       WARNING_OVERLAY_DURATION);
+  }
+}
+
+void play_button_callback(int state, void* data) {
+  (void)state;
+  (void)data;
+  target_frame_number = INT64_MAX;
+}
+
+void pause_button_callback(int state, void* data) {
+  (void)state;
+  int64_t frame_number = *(int64_t*)data;
+  target_frame_number = frame_number;
+}
+
+void seek_forward(int state, void* data) {
+  (void)state;
+  int64_t frame_number = *(int64_t*)data;
+  target_frame_number = frame_number + seek_interval;
+}
+
+void seek_backward(int state, void* data) {
+  (void)state;
+  int64_t frame_number = *(int64_t*)data;
+  target_frame_number = frame_number - seek_interval;
+}
+
+// TODO: merge the lists
+void print_events(std::ostream& stream) {
+  for (decltype(event_intervals.size()) i = 0; i < event_intervals.size();
+       i++) {
+    stream << "(" << event_intervals.at(i).first << ", "
+           << event_intervals.at(i).second << ") - Event " << i << std::endl;
+  }
+  for (decltype(uncertain_intervals.size()) i = 0;
+       i < uncertain_intervals.size(); i++) {
+    stream << "(" << uncertain_intervals.at(i).first << ", "
+           << uncertain_intervals.at(i).second << ") - Uncertain" << std::endl;
+  }
+}
+
+// Gracefully handle termination
 void handler(int signal) {
-  for(auto start : start_frames_full) {
-    std::cout << "Full Start:" << start << std::endl;
-  }
-  for(auto end: end_frames_full) {
-    std::cout << "Full Finish:" << end << std::endl;
-  }
-  for(auto start : start_frames_partial) {
-    std::cout << "Partial Start:" << start << std::endl;
-  }
-  for(auto end: end_frames_partial) {
-    std::cout << "Partial Finish:" << end << std::endl;
-  }
+  (void)signal;
+  print_events(std::cout);
 }
 
-
-int64_t get_prev_neighbor(std::set<int64_t>& set, int64_t frame_id) {
-  int64_t best_candidate = frame_id;
-  int64_t best_score = INT64_MAX;
-  for(auto item : set) {
-    if(item > frame_id)
-      continue;
-    int64_t score = frame_id - item;
-    if(score < best_score) {
-      best_score = score;
-      best_candidate = item;
-    }
-  }
-  return best_candidate;
+// Calculate fps
+double get_fps(int64_t frame_number) {
+  int64_t elapsed_frames = frame_number - prev_frame_number;
+  if (elapsed_frames < 0) elapsed_frames *= -1;
+  prev_frame_number = frame_number;
+  struct timeval time;
+  gettimeofday(&time, NULL);
+  double cur_microseconds =
+      double(time.tv_sec * 1000000) + double(time.tv_usec);
+  double elapsed = cur_microseconds - prev_microseconds;
+  prev_microseconds = cur_microseconds;
+  return double(elapsed_frames) / elapsed * 1000000;
 }
 
-int64_t get_next_neighbor(std::set<int64_t>& set, int64_t frame_id) {
-  int64_t best_candidate = frame_id;
-  int64_t best_score = INT64_MAX;
-  for(auto item : set) {
-    if(item < frame_id)
-      continue;
-    int64_t score = item - frame_id;
-    if(score < best_score) {
-      best_score = score;
-      best_candidate = item;
-    }
-  }
-  return best_candidate;
-}
-
-#define NONE 0
-#define PARTIAL 1
-#define FULL 2
-int main(int argc, char* argv[]) {
-  if(argc < 2) {
-    std::cout << "Usage: label input_video <start_frame (optional)>" << std::endl;
-  }
-  std::signal(SIGINT, handler);
+void print_controls() {
   std::cout << "Commands" << std::endl;
   std::cout << "Spacebar - play really fast" << std::endl;
   std::cout << "p - pause immediately" << std::endl;
@@ -82,176 +297,195 @@ int main(int argc, char* argv[]) {
   std::cout << "l - step forward 1 frame" << std::endl;
   std::cout << "n - fast forward K frames" << std::endl;
   std::cout << "b - fast backward N frames" << std::endl;
-  std::cout << "] - increase fast forward speed" << std::endl;
-  std::cout << "[ - decrease fast forward speed" << std::endl;
-  std::cout << "s - mark the current frame as the start of a full event" << std::endl;
-  std::cout << "d - mark the current frame as the end of a full event" << std::endl;
-  std::cout << "a - mark the current frame as the start of a partial event" << std::endl;
-  std::cout << "f - mark the current frame as the end of a partial event" << std::endl;
+  std::cout << "a - mark the current frame as the start of a partial event"
+            << std::endl;
+  std::cout << "s - mark the current frame as the start of a full event"
+            << std::endl;
+  std::cout << "d - mark the current frame as the end of a full event"
+            << std::endl;
+  std::cout << "f - mark the current frame as the end of a partial event"
+            << std::endl;
   std::cout << "q - quit and output all events" << std::endl;
-  std::cout << "S - Go to closest full Start point" << std::endl;
-  std::cout << "D - Go to closest full Finish point" << std::endl;
-  std::cout << "A - Go to closest partial Start point" << std::endl;
-  std::cout << "F - Go to closest partial Finish point" << std::endl;
-  uint8_t marking = NONE;
-  int64_t skip_interval = 60;
-  int64_t frame_id = argc > 2 ? atoi(argv[2]) : 0;
-  int64_t target_frame_id = frame_id;
-  int64_t saved_tag = frame_id;
-  cv::Point frame_number_point(20, 40);
-  cv::Point start_end_point(20, 120);
-  cv::Point skip_interval_point(20, 200);
-  cv::Point extra_point(20, 280);
-  cv::Scalar font_color(200, 200, 250);
-  std::string frame_number_string = std::to_string(frame_id);
-  std::string is_start_end_string = "";
-  std::string skip_interval_string = "Fast-forward interval: " + std::to_string(skip_interval);
-  std::string extra_text = "";
+}
+
+cv::Mat preprocess_frame(cv::Mat frame, int64_t frame_number) {
+  cv::Mat modified_frame;
+  // 1. Do a resize to the target resolution
+  double scale_factor = double(HEIGHT) / frame.rows;
+  cv::resize(frame, modified_frame, cv::Size(0, 0), scale_factor, scale_factor,
+             cv::INTER_LANCZOS4);
+  // Font-related constants
   double font_size = 1;
-  cv::Mat frame;
+  cv::Scalar font_color(200, 200, 250);
+  int thickness = 1;
 
-  cv::VideoCapture vc(argv[1]);
+  // 2. Write fps
+  cv::Point fps_point(2, 40);
+  double fps = get_fps(frame_number);
+  std::stringstream fps_string;
+  fps_string << fps << " fps";
+  cv::putText(modified_frame, fps_string.str(), fps_point,
+              CV_FONT_HERSHEY_SIMPLEX, font_size, font_color, thickness, CV_AA);
+
+  // 2. Write frame number
+  cv::Point frame_number_point(2, 80);
+  std::stringstream frame_number_string;
+  frame_number_string << "Frame " << frame_number;
+  cv::putText(modified_frame, frame_number_string.str(), frame_number_point,
+              CV_FONT_HERSHEY_SIMPLEX, font_size, font_color, thickness, CV_AA);
+
+  return modified_frame;
+}
+
+int main(int argc, char* argv[]) {
+  po::options_description desc("Labels event intervals.");
+  desc.add_options()("help,h", "Print the help message.");
+  desc.add_options()("video,v", po::value<std::string>()->required(),
+                     "Path to the video to label.");
+  desc.add_options()("start-frame,s", po::value<int>()->default_value(0),
+                     "Frame at which to start labeling.");
+  desc.add_options()("out,o", po::value<std::string>()->required(),
+                     "Path to output file.");
+
+  // Parse the command line arguments.
+  po::variables_map args;
+  try {
+    po::store(po::parse_command_line(argc, argv, desc), args);
+    if (args.count("help")) {
+      std::cout << desc << std::endl;
+      return 0;
+    }
+    po::notify(args);
+  } catch (const po::error& e) {
+    std::cerr << e.what() << std::endl;
+    std::cout << desc << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  auto in_filepath = args["video"].as<std::string>();
+  auto start_frame = args["start-frame"].as<int>();
+  if (start_frame < 0) {
+    std::cerr << "\"--start-frame\" cannot be negative, but is: "
+              << std::to_string(start_frame) << std::endl;
+    return 1;
+  }
+  auto out_filepath = args["out"].as<std::string>();
+
+  print_controls();
+  std::signal(SIGINT, handler);
+
+  // Parse arguments.
+  cv::VideoCapture vc(in_filepath);
+  int64_t frame_id = (int64_t)start_frame;
   vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
+  os = std::ofstream(out_filepath);
 
-  cv::namedWindow("video", cv::WINDOW_AUTOSIZE);
-  while(true) {
-    if(frame_id < target_frame_id) {
-      //vc >> frame;
-      //frame_id += 1;
-      frame_id += (skip_interval / 30);
-      if(frame_id > target_frame_id)
-        frame_id = target_frame_id;
-      vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
-      vc >> frame;
-    } else if(frame_id > target_frame_id) {
-      frame_id -= (skip_interval / 30);
-      if(frame_id < target_frame_id)
-        frame_id = target_frame_id;
+  cv::namedWindow("video", cv::WINDOW_AUTOSIZE | CV_GUI_EXPANDED);
+  cv::createButton("uncertainty start (a)", uncertain_interval_start,
+                   &frame_id);
+  cv::createButton("event start (s)", event_interval_start, &frame_id);
+  cv::createButton("event end (d)", event_interval_end, &frame_id);
+  cv::createButton("uncertainty end (f)", uncertain_interval_end, &frame_id);
+  cv::createTrackbar("Skip this many frames per 30 played", nullptr, &frameskip,
+                     FRAMESKIP_MAX, nullptr);
+  cv::createButton("Delete uncertainty start", delete_cur_uncertain, &frame_id);
+  cv::createButton("Delete event start", delete_cur_event, &frame_id);
+  cv::createTrackbar("Seek interval", nullptr, &seek_interval,
+                     SEEK_INTERVAL_MAX, nullptr);
+  cv::createButton("Play", play_button_callback);
+  cv::createButton("Pause", pause_button_callback, &frame_id);
+  cv::createButton("Seek forward", seek_forward, &frame_id);
+  cv::createButton("Seek backward", seek_backward, &frame_id);
+  int dummy = 0;
+  cv::createTrackbar("Separator", nullptr, &dummy, 1, nullptr);
+  cv::createButton("Go to previous event", goto_prev_event, &frame_id);
+  cv::createButton("Go to previous uncertainty", goto_prev_uncertainty,
+                   &frame_id);
+  cv::createButton("Go to next event", goto_next_event, &frame_id);
+  cv::createButton("Go to next uncertainty", goto_next_uncertainty, &frame_id);
+
+  cv::Mat frame;
+  double frames_to_skip = 0;
+  target_frame_number = frame_id;
+  cur_uncertain_interval.first = -1;
+  cur_uncertain_interval.second = -1;
+  cur_event_interval.first = -1;
+  cur_event_interval.second = -1;
+
+  while (true) {
+    display_status_text(frame_id);
+    if (frame_id < target_frame_number) {
+      if (frameskip == 0) {
+        vc >> frame;
+        frame_id += 1;
+      } else {
+        frames_to_skip += (double)frameskip / 30;
+        if (frames_to_skip >= 1) {
+          frame_id += frames_to_skip;
+          frames_to_skip = 0;
+        } else {
+          frame_id += 1;
+        }
+        if (frame_id > target_frame_number) frame_id = target_frame_number;
+        vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
+        vc >> frame;
+      }
+    } else if (frame_id > target_frame_number) {
+      frame_id -= 1;
+      frames_to_skip -= (double)frameskip / 30;
+      if (frames_to_skip >= 1) {
+        frame_id -= frames_to_skip;
+        frames_to_skip = 0;
+      } else {
+        frame_id -= 1;
+      }
+      if (frame_id < target_frame_number) frame_id = target_frame_number;
       vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
       vc >> frame;
     } else {
-      if(frame.empty()) {
+      if (frame.empty()) {
         vc >> frame;
       }
     }
-    if(frame.empty()) {
-      break;
+    if (frame.empty()) {
+      target_frame_number = frame_id - 1;
     }
-    frame_number_string = "Frame number: " + std::to_string(frame_id) + " (" + std::to_string(target_frame_id) + ")";
-    is_start_end_string = "";
-    if(start_frames_full.find(frame_id) != start_frames_full.end()) {
-      is_start_end_string += "Full Start";
-    }
-    if(end_frames_full.find(frame_id) != end_frames_full.end()) {
-      is_start_end_string += "Full Finish";
-    }
-    if(start_frames_partial.find(frame_id) != start_frames_partial.end()) {
-      is_start_end_string += "Partial Start";
-    }
-    if(end_frames_partial.find(frame_id) != end_frames_partial.end()) {
-      is_start_end_string += "Partial Finish";
-    }
-    cv::putText(frame,frame_number_string, frame_number_point, CV_FONT_HERSHEY_SIMPLEX, font_size, font_color, 2, CV_AA);
-    cv::putText(frame,is_start_end_string, start_end_point, CV_FONT_HERSHEY_SIMPLEX, font_size, font_color, 2, CV_AA);
-    cv::putText(frame,skip_interval_string, skip_interval_point, CV_FONT_HERSHEY_SIMPLEX, font_size, font_color, 2, CV_AA);
-    extra_text = "";
-    if(marking & PARTIAL) {
-      extra_text += " (Partial) ";
-    }
-    if(marking & FULL) {
-      extra_text += " (Full) ";
-    }
-    cv::putText(frame,extra_text, extra_point, CV_FONT_HERSHEY_SIMPLEX, font_size, font_color, 2, CV_AA);
-    cv::imshow("video", frame);
+    cv::imshow("video", preprocess_frame(frame, frame_id));
     auto command = cv::waitKey(1);
-    if(command == -1) {
+    if (command == -1) {
       // continue
-    } else if(command == 'p') {
-      target_frame_id = frame_id;
-    } else if(command == 'h') {
-      target_frame_id -= 1;
-    } else if(command == 'l') {
-      target_frame_id += 1;
-    } else if(command == 'n') {
-      target_frame_id += skip_interval;
-    } else if(command == 'b') {
-      target_frame_id -= skip_interval;
-    } else if(command == '[') {
-      skip_interval /= 2;
-      skip_interval_string = "Fast-forward interval: " + std::to_string(skip_interval);
-    } else if(command == ']') {
-      skip_interval *= 2;
-      skip_interval_string = "Fast-forward interval: " + std::to_string(skip_interval);
-    } else if(command == 'q') {
+    } else if (command == 'p') {
+      target_frame_number = frame_id;
+    } else if (command == 'h') {
+      target_frame_number -= 1;
+    } else if (command == 'l') {
+      target_frame_number += 1;
+    } else if (command == 'n') {
+      seek_forward(-1, &frame_id);
+    } else if (command == 'b') {
+      seek_backward(-1, &frame_id);
+    } else if (command == 'q') {
       break;
-    } else if(command == 's') {
-      marking |= FULL;
-      std::cout << start_frames_full.size() << std::endl;
-      if(start_frames_full.find(frame_id) == start_frames_full.end())
-        start_frames_full.insert(frame_id);
+    } else if (command == 's') {
+      event_interval_start(-1, &frame_id);
+    } else if (command == 'd') {
+      event_interval_end(-1, &frame_id);
+    } else if (command == 'a') {
+      uncertain_interval_start(-1, &frame_id);
+    } else if (command == 'f') {
+      uncertain_interval_end(-1, &frame_id);
+    } else if (command == ' ') {
+      if (target_frame_number == INT64_MAX)
+        pause_button_callback(-1, &frame_id);
       else
-        start_frames_full.erase(frame_id);
-    } else if(command == 'd') {
-      marking &= ~FULL;
-      if(end_frames_full.find(frame_id) == end_frames_full.end())
-        end_frames_full.insert(frame_id);
-      else
-        end_frames_full.erase(frame_id);
-    } else if(command == 'a') {
-      marking |= PARTIAL;
-      std::cout << start_frames_partial.size() << std::endl;
-      if(start_frames_partial.find(frame_id) == start_frames_partial.end())
-        start_frames_partial.insert(frame_id);
-      else
-        start_frames_partial.erase(frame_id);
-    } else if(command == 'f') {
-      marking &= ~PARTIAL;
-      if(end_frames_partial.find(frame_id) == end_frames_partial.end())
-        end_frames_partial.insert(frame_id);
-      else
-        end_frames_partial.erase(frame_id);
-    } else if(command == 'S') {
-        target_frame_id = get_prev_neighbor(start_frames_full, frame_id);
-        saved_tag = frame_id;
-        extra_text = "(R) - return to " + std::to_string(saved_tag);
-    } else if(command == 'D') {
-        target_frame_id = get_next_neighbor(end_frames_full, frame_id);
-        saved_tag = frame_id;
-        extra_text = "(R) - return to " + std::to_string(saved_tag);
-    } else if(command == 'A') {
-        target_frame_id = get_prev_neighbor(start_frames_partial, frame_id);
-        saved_tag = frame_id;
-        extra_text = "(R) - return to " + std::to_string(saved_tag);
-    } else if(command == 'F') {
-        target_frame_id = get_next_neighbor(end_frames_partial, frame_id);
-        saved_tag = frame_id;
-        extra_text = "(R) - return to " + std::to_string(saved_tag);
-    } else if(command == 'R') {
-        extra_text = "";
-        target_frame_id = saved_tag;
-    } else if(command == ' ') {
-        if(target_frame_id == INT64_MAX)
-          target_frame_id = frame_id;
-        else 
-          target_frame_id = INT64_MAX;
+        play_button_callback(-1, nullptr);
     } else {
       // do nothing
     }
   }
-  for(auto start : start_frames_full) {
-    os << "Full Start:" << start << std::endl;
-    std::cout << "Full Start:" << start << std::endl;
-  }
-  for(auto end: end_frames_full) {
-    os << "Full Finish:" << end << std::endl;
-    std::cout << "Full Finish:" << end << std::endl;
-  }
-  for(auto start : start_frames_partial) {
-    os << "Partial Start:" << start << std::endl;
-    std::cout << "Partial Start:" << start << std::endl;
-  }
-  for(auto end: end_frames_partial) {
-    os << "Partial Finish:" << end << std::endl;
-    std::cout << "Partial Finish:" << end << std::endl;
-  }
+
+  print_events(os);
+  print_events(std::cout);
+
+  return 0;
 }

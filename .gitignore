@@ -31,5 +31,12 @@
 *.out
 *.app
 
-label
+# Generated binary.
+labeler
+
+# Vim swap files
 *.swp
+
+# Emacs autosave files
+*~
+\#*\#
