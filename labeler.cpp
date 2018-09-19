@@ -157,7 +157,9 @@ void goto_prev_event(int state, void* data) {
   }
   for (decltype(event_intervals.size()) i = 0; i < event_intervals.size();
        ++i) {
-    if (frame_number < event_intervals.at(i).first) continue;
+    if (frame_number < event_intervals.at(i).first) {
+      continue;
+    }
     if (frame_number - event_intervals.at(i).first < min_dist) {
       target_frame_number = event_intervals.at(i).first;
     }
@@ -178,7 +180,9 @@ void goto_prev_uncertainty(int state, void* data) {
   }
   for (decltype(uncertain_intervals.size()) i = 0;
        i < uncertain_intervals.size(); ++i) {
-    if (frame_number < uncertain_intervals.at(i).first) continue;
+    if (frame_number < uncertain_intervals.at(i).first) {
+      continue;
+    }
     if (frame_number - uncertain_intervals.at(i).first < min_dist) {
       target_frame_number = uncertain_intervals.at(i).first;
     }
@@ -199,7 +203,9 @@ void goto_next_event(int state, void* data) {
   }
   for (decltype(event_intervals.size()) i = 0; i < event_intervals.size();
        ++i) {
-    if (frame_number > event_intervals.at(i).first) continue;
+    if (frame_number > event_intervals.at(i).first) {
+      continue;
+    }
     if (event_intervals.at(i).first - frame_number < min_dist) {
       target_frame_number = event_intervals.at(i).first;
     }
@@ -220,7 +226,9 @@ void goto_next_uncertainty(int state, void* data) {
   }
   for (decltype(uncertain_intervals.size()) i = 0;
        i < uncertain_intervals.size(); ++i) {
-    if (frame_number > uncertain_intervals.at(i).first) continue;
+    if (frame_number > uncertain_intervals.at(i).first) {
+      continue;
+    }
     if (uncertain_intervals.at(i).first - frame_number < min_dist) {
       target_frame_number = uncertain_intervals.at(i).first;
     }
@@ -278,7 +286,9 @@ void handler(int signal) {
 // Calculate fps
 double get_fps(int64_t frame_number) {
   int64_t elapsed_frames = frame_number - prev_frame_number;
-  if (elapsed_frames < 0) elapsed_frames *= -1;
+  if (elapsed_frames < 0) {
+    elapsed_frames *= -1;
+  }
   prev_frame_number = frame_number;
   struct timeval time;
   gettimeofday(&time, NULL);
