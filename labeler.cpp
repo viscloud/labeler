@@ -426,7 +426,9 @@ int main(int argc, char* argv[]) {
         } else {
           frame_id += 1;
         }
-        if (frame_id > target_frame_number) frame_id = target_frame_number;
+        if (frame_id > target_frame_number) {
+          frame_id = target_frame_number;
+        }
         vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
         vc >> frame;
       }
@@ -439,7 +441,9 @@ int main(int argc, char* argv[]) {
       } else {
         frame_id -= 1;
       }
-      if (frame_id < target_frame_number) frame_id = target_frame_number;
+      if (frame_id < target_frame_number) {
+        frame_id = target_frame_number;
+      }
       vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
       vc >> frame;
     } else {
@@ -475,10 +479,11 @@ int main(int argc, char* argv[]) {
     } else if (command == 'f') {
       uncertain_interval_end(-1, &frame_id);
     } else if (command == ' ') {
-      if (target_frame_number == INT64_MAX)
+      if (target_frame_number == INT64_MAX) {
         pause_button_callback(-1, &frame_id);
-      else
+      } else {
         play_button_callback(-1, nullptr);
+      }
     } else {
       // do nothing
     }
