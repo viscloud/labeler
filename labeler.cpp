@@ -428,6 +428,10 @@ int main(int argc, char* argv[]) {
       if (frameskip == 0) {
         vc >> frame;
         frame_id += 1;
+        if(frame.empty()) {
+          print_events(os);
+          print_events(std::cout);
+        }
       } else {
         frames_to_skip += (double)frameskip / 30;
         if (frames_to_skip >= 1) {
