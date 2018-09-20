@@ -16,7 +16,7 @@ namespace po = boost::program_options;
 
 // Constants.
 constexpr int HEIGHT = 480;
-constexpr int WARNING_OVERLAY_DURATION = 2000;
+constexpr int WARNING_OVERLAY_DURATION = 5000;
 constexpr int FRAMESKIP_MAX = 900;
 constexpr int SEEK_INTERVAL_MAX = 900;
 
@@ -59,16 +59,29 @@ void display_status_text(int64_t frame_id) {
 void delete_cur_uncertain(int state, void* data) {
   (void)state;
   int64_t frame_number = *(int64_t*)data;
-  labels[cur_uncertain_interval.first].pop_back();
-  cur_uncertain_interval.first = -1;
+  if (cur_uncertain_interval.first == -1) {
+    cv::displayOverlay("video",
+                       "Unable to delete start uncertain event if current "
+                       "uncertain event is closed.",
+                       WARNING_OVERLAY_DURATION);
+  } else {
+    labels[cur_uncertain_interval.first].pop_back();
+    cur_uncertain_interval.first = -1;
+  }
   display_status_text(frame_number);
 }
 
 void delete_cur_event(int state, void* data) {
   (void)state;
   int64_t frame_number = *(int64_t*)data;
-  labels[cur_event_interval.first].pop_back();
-  cur_event_interval.first = -1;
+  if (cur_uncertain_interval.first == -1) {
+    cv::displayOverlay(
+        "video", "Unable to delete start event if current event is closed.",
+        WARNING_OVERLAY_DURATION);
+  } else {
+    labels[cur_event_interval.first].pop_back();
+    cur_event_interval.first = -1;
+  }
   display_status_text(frame_number);
 }
 
@@ -428,7 +441,7 @@ int main(int argc, char* argv[]) {
       if (frameskip == 0) {
         vc >> frame;
         frame_id += 1;
-        if(frame.empty()) {
+        if (frame.empty()) {
           print_events(os);
           print_events(std::cout);
         }
