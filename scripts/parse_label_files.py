@@ -8,7 +8,7 @@ import h5py
 import numpy as np
 
 
-LABEL_FILE_EXTENSION = "dat"
+LABELS_FILE_EXTENSION = "dat"
 EVENT_LABEL = "Event"
 UNCERTAIN_LABEL = "Uncertain"
 EVENT_VAL = 1
@@ -18,8 +18,8 @@ UNCERTAIN_VAL = -1
 
 def read_file(filepath, frame_to_event):
     print("Reading file: {}".format(filepath))
-    with open(filepath, "r") as label_file:
-        for line in label_file:
+    with open(filepath, "r") as labels_file:
+        for line in labels_file:
             # (19, 41) - Event 0
             # (64, 124) - Uncertain
             range_str, label_str = line.strip().split("-")
@@ -61,9 +61,9 @@ def main():
 
     # Map from frame to a label
     frame_to_event = dict()
-    for label_filename in os.listdir(labels_dirpath):
-        if label_filename.endswith(LABEL_FILE_EXTENSION):
-            read_file(path.join(labels_dirpath, label_filename), frame_to_event)
+    for labels_filename in os.listdir(labels_dirpath):
+        if labels_filename.endswith(LABELS_FILE_EXTENSION):
+            read_file(path.join(labels_dirpath, labels_filename), frame_to_event)
 
     out_file = h5py.File(out_filepath, "w")
     out_file.create_dataset("labels", [num_frames], dtype=np.int32)
