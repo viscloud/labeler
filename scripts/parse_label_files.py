@@ -70,7 +70,6 @@ def main():
     for frame_id in range(num_frames):
         out_file["labels"][frame_id] = frame_to_event.get(
             frame_id, NO_EVENT_VAL)
-        print("{}: {}".format(frame_id, out_file["labels"][frame_id]))
 
 
 if __name__ == '__main__':
