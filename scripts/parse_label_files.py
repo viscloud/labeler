@@ -28,10 +28,9 @@ def read_file(filepath, frame_to_event):
             end_frame = int(end_str.strip())
 
             label_str = label_str.strip()
-            is_event = False
-            if label_str.startswith(EVENT_LABEL):
+            is_event = label_str.startswith(EVENT_LABEL)
+            if is_event:
                 label = EVENT_VAL
-                is_event = True
             elif label_str == UNCERTAIN_LABEL:
                 label = UNCERTAIN_VAL
             else:
