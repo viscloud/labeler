@@ -33,6 +33,8 @@ int seek_interval = 30;
 double prev_microseconds = 0;
 int64_t prev_frame_number = 0;
 
+int did_seek = 0;
+
 void display_status_text(int64_t frame_id) {
   std::string status_bar_text = "";
   if (cur_uncertain_interval.first >= 0) {
@@ -268,6 +270,7 @@ void seek_forward(int state, void* data) {
   (void)state;
   int64_t frame_number = *(int64_t*)data;
   target_frame_number = frame_number + seek_interval;
+  did_seek = 1;
 }
 
 void seek_backward(int state, void* data) {
@@ -438,7 +441,7 @@ int main(int argc, char* argv[]) {
   while (true) {
     display_status_text(frame_id);
     if (frame_id < target_frame_number) {
-      if (frameskip == 0) {
+      if (frameskip == 0 && did_seek == 0) {
         vc >> frame;
         frame_id += 1;
         if (frame.empty()) {
@@ -446,36 +449,30 @@ int main(int argc, char* argv[]) {
           print_events(std::cout);
         }
       } else {
-        frames_to_skip += (double)frameskip / 30;
-        if (frames_to_skip >= 1) {
-          frame_id += frames_to_skip;
-          frames_to_skip = 0;
-        } else {
-          frame_id += 1;
-        }
-        if (frame_id > target_frame_number) {
-          frame_id = target_frame_number;
-        }
+        did_seek = 0;
+        frame_id = target_frame_number;
         vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
         vc >> frame;
+        if (frame.empty()) {
+          print_events(os);
+          print_events(std::cout);
+        }
       }
     } else if (frame_id > target_frame_number) {
-      frame_id -= 1;
-      frames_to_skip -= (double)frameskip / 30;
-      if (frames_to_skip >= 1) {
-        frame_id -= frames_to_skip;
-        frames_to_skip = 0;
-      } else {
-        frame_id -= 1;
-      }
-      if (frame_id < target_frame_number) {
-        frame_id = target_frame_number;
-      }
+      frame_id = target_frame_number;
       vc.set(cv::CAP_PROP_POS_FRAMES, frame_id);
       vc >> frame;
+      if (frame.empty()) {
+        print_events(os);
+        print_events(std::cout);
+      }
     } else {
       if (frame.empty()) {
         vc >> frame;
+        if (frame.empty()) {
+          print_events(os);
+          print_events(std::cout);
+        }
       }
     }
     if (frame.empty()) {
